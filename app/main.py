@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .cases import load_answer_key
 from .config import get_settings
 from .database import Base, engine
-from .routers import leaderboard, score
+from .routers import bot, leaderboard, score
 
 
 @asynccontextmanager
@@ -14,6 +14,7 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     Base.metadata.create_all(bind=engine)  # արտադրության մեջ՝ Alembic միգրացիաներ
     app.state.answer_key = load_answer_key(settings.cases_dir)
+    bot.register_webhook()
     yield
 
 
@@ -28,6 +29,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(leaderboard.router)
     app.include_router(score.router)
+    app.include_router(bot.router)
 
     @app.get("/health")
     def health():
