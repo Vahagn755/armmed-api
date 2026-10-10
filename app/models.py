@@ -51,3 +51,15 @@ class SolvedCase(Base):
     user: Mapped[User] = relationship(back_populates="solved")
 
     __table_args__ = (UniqueConstraint("user_id", "case_id", name="uq_user_case"),)
+
+
+class Purchase(Base):
+    """Plus-ի գնում Telegram Stars-ով։ Plus ունի նա, ում telegram_id-ով առնվազն մեկ գրառում կա։"""
+
+    __tablename__ = "purchases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
+    charge_id: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)  # Telegram-ի վճարման id (կրկնությունից պաշտպանություն)
+    stars: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
