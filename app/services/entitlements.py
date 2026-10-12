@@ -1,11 +1,12 @@
 """Plus-ի կարգավիճակ, սակագներ և անվճար/վճարովի քեյսերի բաժանում։"""
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from ..models import Purchase
+from ..models import Gift, Purchase
 
 FREE_PER_SPECIALTY = 5  # յուրաքանչյուր ուղղության առաջին 5 քեյսն անվճար են
 
@@ -76,3 +77,33 @@ def record_purchase(db: Session, telegram_id: int, charge_id: str, stars: int,
     db.add(Purchase(telegram_id=telegram_id, charge_id=charge_id, stars=stars, plan=plan, expires_at=expires_at))
     db.commit()
     return True
+
+
+# ---------- Նվերներ ----------
+def create_gift(db: Session, buyer_id: int, plan: str, charge_id: str, stars: int):
+    """(gift, new)։ Կրկնվող charge_id-ի դեպքում նոր նվեր չի ստեղծվում։"""
+    existing = db.scalar(select(Gift).where(Gift.charge_id == charge_id))
+    if existing:
+        return existing, False
+    g = Gift(code=secrets.token_urlsafe(9), plan=plan, buyer_id=buyer_id, charge_id=charge_id, stars=stars)
+    db.add(g)
+    db.commit()
+    return g, True
+
+
+def redeem_gift(db: Session, code: str, redeemer_id: int):
+    """('ok'|'used'|'none', gift)։ Ատոմար. նույն նվերը չի կարող երկու անգամ ակտիվանալ։"""
+    g = db.scalar(select(Gift).where(Gift.code == code))
+    if not g:
+        return "none", None
+    res = db.execute(update(Gift).where(Gift.id == g.id, Gift.redeemed_by.is_(None))
+                     .values(redeemed_by=redeemer_id, redeemed_at=now_utc()))
+    db.commit()
+    if res.rowcount != 1:
+        return "used", g
+    record_purchase(db, redeemer_id, f"gift-{g.code}", 0, plan=g.plan)
+    return "ok", g
+
+
+def list_gifts(db: Session, buyer_id: int):
+    return list(db.scalars(select(Gift).where(Gift.buyer_id == buyer_id).order_by(Gift.id.desc()).limit(20)))
