@@ -65,3 +65,19 @@ class Purchase(Base):
     plan: Mapped[str | None] = mapped_column(String(16), nullable=True)  # 1m / 3m / 12m; NULL՝ հին «ընդմիշտ» գնում
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # NULL՝ առանց ժամկետի
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Gift(Base):
+    """Նվիրված Plus. գնորդը վճարում է, ստանում է code, իսկ ընկերը այն ակտիվացնում է բոտի /start gift_<code> հղումով։"""
+
+    __tablename__ = "gifts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    plan: Mapped[str] = mapped_column(String(16), nullable=False)  # 1m / 3m / 12m
+    buyer_id: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
+    charge_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    stars: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    redeemed_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    redeemed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
