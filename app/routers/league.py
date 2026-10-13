@@ -1,7 +1,7 @@
-"""Շաբաթական աղյուսակ. միավորները հաշվվում են միայն ընթացիկ շաբաթվա (երկուշաբթի 00:00-ից) նոր լուծված քեյսերից։"""
+"""Ժամանակային աղյուսակներ (օր / շաբաթ / ամիս / տարի). միավորները հաշվվում են միայն այդ ժամանակահատվածում նոր լուծված քեյսերից։"""
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -13,20 +13,34 @@ from ..security import get_current_user
 router = APIRouter(prefix="/api/league", tags=["league"])
 
 
-def week_bounds(tz_name: str, now: datetime | None = None) -> tuple[datetime, datetime]:
+def period_bounds(tz_name: str, period: str, now: datetime | None = None) -> tuple[datetime, datetime]:
+    """(սկիզբ, ավարտ) ընտրված ժամանակահատվածի՝ Երևանի ժամանակով։ period՝ day | week | month | year"""
     try:
         from zoneinfo import ZoneInfo
         tz = ZoneInfo(tz_name)
     except Exception:  # tzdata չկա → Երևանի ֆիքսված UTC+4
         tz = timezone(timedelta(hours=4))
     n = (now or datetime.now(timezone.utc)).astimezone(tz)
-    start = (n - timedelta(days=n.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    day0 = n.replace(hour=0, minute=0, second=0, microsecond=0)
+    if period == "day":
+        return day0, day0 + timedelta(days=1)
+    if period == "month":
+        start = day0.replace(day=1)
+        nxt = (start.replace(year=start.year + 1, month=1) if start.month == 12 else start.replace(month=start.month + 1))
+        return start, nxt
+    if period == "year":
+        start = day0.replace(month=1, day=1)
+        return start, start.replace(year=start.year + 1)
+    start = day0 - timedelta(days=n.weekday())  # week
     return start, start + timedelta(days=7)
 
 
-@router.get("/week")
-def week_top(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    start, end = week_bounds(get_settings().timezone)
+def week_bounds(tz_name: str, now: datetime | None = None) -> tuple[datetime, datetime]:
+    return period_bounds(tz_name, "week", now)
+
+
+def _top(db: Session, user: User, period: str) -> dict:
+    start, end = period_bounds(get_settings().timezone, period)
     pts = func.sum(SolvedCase.points).label("pts")
     cnt = func.count(SolvedCase.id).label("cnt")
     rows = db.execute(
@@ -53,5 +67,16 @@ def week_top(db: Session = Depends(get_db), user: User = Depends(get_current_use
             .having(func.sum(SolvedCase.points) > mine)
         )
         rank = (db.scalar(select(func.count()).select_from(ahead_q.subquery())) or 0) + 1
-    return {"week_ends_at": end.astimezone(timezone.utc).isoformat(), "players": players,
+    return {"period": period, "ends_at": end.astimezone(timezone.utc).isoformat(), "week_ends_at": end.astimezone(timezone.utc).isoformat(), "players": players,
             "me": {"points": int(mine), "rank": rank}}
+
+
+@router.get("/top")
+def top(period: str = Query("week", pattern="^(day|week|month|year)$"),
+        db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return _top(db, user, period)
+
+
+@router.get("/week")
+def week_top(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return _top(db, user, "week")
