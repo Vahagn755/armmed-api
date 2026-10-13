@@ -5,6 +5,7 @@
 """
 import os
 import secrets
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -105,7 +106,11 @@ def my_duels(db: Session = Depends(get_db), user: User = Depends(get_current_use
     tid = user.telegram_id
     rows = db.scalars(select(Duel).where(or_(Duel.creator_id == tid, Duel.opp_id == tid)).order_by(Duel.id.desc()).limit(20))
     out = []
+    old = datetime.now(timezone.utc) - timedelta(days=1)
     for d in rows:
+        ca = d.created_at if d.created_at is None or d.created_at.tzinfo else d.created_at.replace(tzinfo=timezone.utc)
+        if d.opp_id is None and d.c_time is None and ca is not None and ca < old:
+            continue  # 1 օրից հին, չսկսված դուելները չենք ցույց տալիս
         v = _view(d, tid)
         other = d.opp_name if v["role"] == "creator" else d.creator_name
         out.append({"code": d.code, "link": v["link"], "status": v["status"], "role": v["role"],
@@ -185,3 +190,16 @@ def share_duel(code: str, db: Session = Depends(get_db), user: User = Depends(ge
     if not mid:
         raise HTTPException(502, "share_unavailable")
     return {"message_id": mid}
+
+
+@router.delete("/{code}")
+def delete_duel(code: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Դուելը ջնջել կարող է միայն ստեղծողը, և միայն քանի դեռ այն ավարտված չէ։"""
+    d = _get(db, code)
+    if d.creator_id != user.telegram_id:
+        raise HTTPException(403, "not_creator")
+    if d.c_time is not None and d.o_time is not None:
+        raise HTTPException(409, "duel_finished")
+    db.delete(d)
+    db.commit()
+    return {"ok": True}
