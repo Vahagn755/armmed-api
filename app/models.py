@@ -81,3 +81,22 @@ class Gift(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     redeemed_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     redeemed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class Duel(Base):
+    """Դուել ընկերոջ հետ. նույն 5 քեյսը, հաղթում է ավելի շատ ճիշտ պատասխանողը (հավասարության դեպքում՝ ավելի արագը)։"""
+
+    __tablename__ = "duels"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(16), unique=True, index=True, nullable=False)
+    case_ids: Mapped[str] = mapped_column(String(512), nullable=False)  # ստորակետերով բաժանված
+    creator_id: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
+    creator_name: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    opp_id: Mapped[int | None] = mapped_column(BigInteger, index=True, nullable=True)
+    opp_name: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    c_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    c_time: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    o_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    o_time: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

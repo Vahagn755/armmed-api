@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .cases import load_answer_key
 from .config import get_settings
 from .database import Base, engine
-from .routers import bot, leaderboard, plus, score
+from .routers import bot, duels, leaderboard, league, plus, score
 
 
 @asynccontextmanager
@@ -41,6 +41,8 @@ def create_app() -> FastAPI:
     app.include_router(leaderboard.router)
     app.include_router(score.router)
     app.include_router(plus.router)
+    app.include_router(duels.router)
+    app.include_router(league.router)
     app.include_router(bot.router)
 
     @app.get("/health")
