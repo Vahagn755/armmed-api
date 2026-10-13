@@ -17,7 +17,7 @@ from ..config import get_settings
 log = logging.getLogger("bot")
 router = APIRouter()
 
-WEBAPP_URL = os.getenv("WEBAPP_URL", "https://vahagn755.github.io/QUIZ-ARMMED/app_v19.html")
+WEBAPP_URL = os.getenv("WEBAPP_URL", "https://vahagn755.github.io/QUIZ-ARMMED/app_v20.html")
 PUBLIC_URL = os.getenv("PUBLIC_URL", "https://armmed-api.onrender.com")
 
 WELCOME = (
