@@ -152,3 +152,36 @@ def submit_result(code: str, body: DuelResultIn, request: Request, db: Session =
     v = _view(d, user.telegram_id)
     v["my_score"] = score
     return v
+
+
+@router.post("/{code}/share")
+def share_duel(code: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Պատրաստում է Telegram-ի «պատրաստի հաղորդագրություն» (Bot API 8.0), որպեսզի հավելվածը բացի ընկերների ընտրության ցանկը։"""
+    from .bot import tg_call  # ուշ import՝ շրջանաձև կախվածությունից խուսափելու համար
+
+    d = _get(db, code)
+    if d.creator_id != user.telegram_id:
+        raise HTTPException(403, "not_creator")
+    link = _link(d.code)
+    result = {
+        "type": "article",
+        "id": "duel_" + d.code,
+        "title": "Դուել",
+        "description": "5 բժշկական քեյս՝ ով ավելի շատ ճիշտ և արագ",
+        "input_message_content": {
+            "message_text": "⚔️ " + (user.first_name or "Ընկերդ") + "-ը քեզ դուելի է հրավիրում։\n5 բժշկական քեյս՝ հաղթում է ավելի շատ ճիշտ պատասխանողը, հավասարության դեպքում՝ ավելի արագը։",
+        },
+        "reply_markup": {"inline_keyboard": [[{"text": "⚔️ Ընդունել մարտահրավերը", "url": link}]]},
+    }
+    try:
+        res = tg_call("savePreparedInlineMessage", {
+            "user_id": user.telegram_id, "result": result,
+            "allow_user_chats": True, "allow_group_chats": True,
+            "allow_bot_chats": False, "allow_channel_chats": False,
+        })
+        mid = (res.get("result") or {}).get("id")
+    except Exception:
+        mid = None
+    if not mid:
+        raise HTTPException(502, "share_unavailable")
+    return {"message_id": mid}
