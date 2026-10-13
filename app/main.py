@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .cases import load_answer_key
 from .config import get_settings
 from .database import Base, engine
-from .routers import bot, duels, leaderboard, league, plus, score
+from .routers import bot, duels, leaderboard, league, plus, progress, score
 
 
 @asynccontextmanager
@@ -35,7 +35,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
     )
     app.include_router(leaderboard.router)
@@ -43,6 +43,7 @@ def create_app() -> FastAPI:
     app.include_router(plus.router)
     app.include_router(duels.router)
     app.include_router(league.router)
+    app.include_router(progress.router)
     app.include_router(bot.router)
 
     @app.get("/health")
