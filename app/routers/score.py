@@ -23,8 +23,8 @@ def answer(
 ):
     """Ստանում է քեյսի id-ն և ընտրված տարբերակի ինդեքսը (JSON-ի սկզբնական հերթականությամբ)։
     Ճիշտությունը ստուգվում է սերվերում, միավորը տրվում է քեյսի համար առավելագույնը մեկ անգամ։"""
-    if plus_svc.is_plus_case(body.case_id) and not plus_svc.user_has_plus(db, user.telegram_id):
-        raise HTTPException(403, "plus_required")
+    if not plus_svc.has_case_access(db, user.telegram_id, body.case_id):
+        raise HTTPException(403, "lic_required" if plus_svc.lic_spec(body.case_id) else "plus_required")
     try:
         res = submit_answer(
             db, user, body.case_id, body.selected_index,

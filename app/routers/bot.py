@@ -77,6 +77,15 @@ def _parse_gift_payload(payload: str, payer):
     return None
 
 
+def _parse_lic_payload(payload: str, payer):
+    """'lic:{buyer_id}:{spec}' → spec | None։"""
+    from ..services.entitlements import LIC_SPECS
+    parts = payload.split(":")
+    if len(parts) == 3 and parts[0] == "lic" and payer and parts[1] == str(payer) and parts[2] in LIC_SPECS:
+        return parts[2]
+    return None
+
+
 PLAN_LABEL = {"1m": "1 ամիս", "3m": "3 ամիս", "12m": "12 ամիս"}
 BOT_USERNAME = os.getenv("BOT_USERNAME", "ArmMedQuiz_bot")
 
@@ -121,7 +130,8 @@ async def webhook(request: Request, x_telegram_bot_api_secret_token: str = Heade
     if pcq:  # Stars վճարումից առաջ պետք է հաստատել 10 վայրկյանում
         payer = (pcq.get("from") or {}).get("id")
         ipl = str(pcq.get("invoice_payload", ""))
-        ok = (_parse_payload(ipl, payer) is not None or _parse_gift_payload(ipl, payer) is not None) and pcq.get("currency") == "XTR"
+        ok = (_parse_payload(ipl, payer) is not None or _parse_gift_payload(ipl, payer) is not None
+              or _parse_lic_payload(ipl, payer) is not None) and pcq.get("currency") == "XTR"
         try:
             payload = {"pre_checkout_query_id": pcq["id"], "ok": ok}
             if not ok:
@@ -135,6 +145,22 @@ async def webhook(request: Request, x_telegram_bot_api_secret_token: str = Heade
     sp = msg.get("successful_payment")
     if sp and sp.get("currency") == "XTR":
         payer = (msg.get("from") or {}).get("id")
+        lspec = _parse_lic_payload(str(sp.get("invoice_payload", "")), payer)
+        if lspec:
+            from ..database import SessionLocal
+            from ..services.entitlements import record_lic_purchase
+            db = SessionLocal()
+            try:
+                new = record_lic_purchase(db, int(payer), lspec, str(sp.get("telegram_payment_charge_id")), int(sp.get("total_amount", 0)))
+            finally:
+                db.close()
+            if new:
+                try:
+                    _call("sendMessage", {"chat_id": msg["chat"]["id"], "reply_markup": _open_btn(),
+                                          "text": "✅ Շնորհակալություն։ Ուղղության բոլոր հարցերը բացվեցին։ Բարի ուսում 🩺"})
+                except Exception as e:
+                    log.warning("lic thanks failed: %s", e)
+            return {"ok": True}
         gplan = _parse_gift_payload(str(sp.get("invoice_payload", "")), payer)
         if gplan:
             from ..database import SessionLocal

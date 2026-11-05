@@ -111,3 +111,18 @@ class Progress(Base):
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True, nullable=False)
     data: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class LicPurchase(Base):
+    """Լիցենզիայի քննության մեկ ուղղության մեկանգամյա գնում (Telegram Stars)։ spec՝ օր. 'family', 'trauma'։"""
+
+    __tablename__ = "lic_purchases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
+    spec: Mapped[str] = mapped_column(String(32), nullable=False)
+    charge_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    stars: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    __table_args__ = (UniqueConstraint("telegram_id", "spec", name="uq_lic_user_spec"),)

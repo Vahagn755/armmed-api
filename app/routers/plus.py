@@ -3,6 +3,8 @@ import os
 from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from ..cases import load_lic_answers
+from ..config import get_settings
 from ..database import get_db
 from ..models import User
 from ..security import get_current_user
@@ -89,3 +91,47 @@ def my_gifts(db: Session = Depends(get_db), user: User = Depends(get_current_use
          "created_at": g.created_at.isoformat() if g.created_at else None}
         for g in plus_svc.list_gifts(db, user.telegram_id)
     ]}
+
+
+# ---------- Լիցենզիայի ուղղությունների առանձին գնում ----------
+_lic_cache: dict[str, dict] = {}
+
+
+@router.get("/lic/me")
+def lic_me(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return {"owned": plus_svc.lic_owned(db, user.telegram_id), "price_stars": plus_svc.LIC_PRICE_STARS,
+            "free": plus_svc.LIC_FREE, "plus_unlocks": True}
+
+
+@router.post("/lic/invoice")
+def lic_invoice(body: dict = Body(default={}), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    spec = str(body.get("spec") or "")
+    if spec not in plus_svc.LIC_SPECS:
+        raise HTTPException(400, "unknown spec")
+    if spec in plus_svc.lic_owned(db, user.telegram_id):
+        return {"already": True}
+    title = "Լիցենզիայի քննություն · ամբողջ ուղղությունը"
+    try:
+        res = tg_call("createInvoiceLink", {
+            "title": title,
+            "description": "Այս ուղղության բոլոր հարցերը՝ ճիշտ պատասխաններով, մեկանգամյա վճարով, ընդմիշտ։",
+            "payload": f"lic:{user.telegram_id}:{spec}",
+            "provider_token": "",
+            "currency": "XTR",
+            "prices": [{"label": title, "amount": plus_svc.LIC_PRICE_STARS}],
+        })
+    except Exception:
+        raise HTTPException(502, "Telegram invoice failed")
+    return {"already": False, "link": res.get("result"), "spec": spec}
+
+
+@router.get("/lic/answers/{spec}")
+def lic_answers(spec: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Ճիշտ պատասխանները տրվում են միայն սերվերից և միայն իրավասու օգտատիրոջը (գնած կամ Plus)։"""
+    if spec not in plus_svc.LIC_SPECS:
+        raise HTTPException(404, "unknown spec")
+    if not (plus_svc.user_has_plus(db, user.telegram_id) or spec in plus_svc.lic_owned(db, user.telegram_id)):
+        raise HTTPException(403, "lic_required")
+    if spec not in _lic_cache:
+        _lic_cache[spec] = load_lic_answers(get_settings().cases_dir, spec)
+    return {"answers": _lic_cache[spec]}

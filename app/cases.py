@@ -15,3 +15,12 @@ def load_answer_key(cases_dir: str) -> dict[str, int]:
                 raise ValueError(f"duplicate case id {cid}")
             key[cid] = idx
     return key
+
+
+def load_lic_answers(cases_dir: str, spec: str) -> dict[str, dict]:
+    """lic_<spec>.json → {id: {c, why}}՝ միայն վճարած օգտատիրոջը տալու համար։"""
+    path = Path(cases_dir) / f"lic_{spec}.json"
+    if not path.exists():
+        return {}
+    return {c["id"]: {"c": c["correctOptionIndex"], "why": c.get("explanation") or ""}
+            for c in json.loads(path.read_text(encoding="utf-8"))}

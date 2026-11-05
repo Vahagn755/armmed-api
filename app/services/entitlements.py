@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from ..models import Gift, Purchase
+from ..models import Gift, LicPurchase, Purchase
 
 FREE_PER_SPECIALTY = 5  # յուրաքանչյուր ուղղության առաջին 5 քեյսն անվճար են
 
@@ -34,11 +34,49 @@ def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+LIC_FREE = int(os.getenv("LIC_FREE") or "50")            # լիցենզիայի ուղղության անվճար հարցերի քանակ
+LIC_PRICE_STARS = int(os.getenv("LIC_PRICE_STARS") or "250")  # ≈ $4.99
+LIC_SPECS = ("trauma", "family", "forensic", "ent", "pedsurg", "thoracic", "urology", "rehab", "pedrehab")
+
+
+def lic_spec(case_id: str) -> str | None:
+    """'licfamily_012' → 'family'; ոչ լիցենզիայի քեյսի համար՝ None։"""
+    head = case_id.rsplit("_", 1)[0]
+    if head.startswith("lic") and head[3:] in LIC_SPECS:
+        return head[3:]
+    return None
+
+
 def is_plus_case(case_id: str) -> bool:
     try:
-        return int(case_id.rsplit("_", 1)[1]) > FREE_PER_SPECIALTY
+        n = int(case_id.rsplit("_", 1)[1])
     except (IndexError, ValueError):
         return False
+    return n > (LIC_FREE if lic_spec(case_id) else FREE_PER_SPECIALTY)
+
+
+def lic_owned(db: Session, telegram_id: int) -> list[str]:
+    return list(db.scalars(select(LicPurchase.spec).where(LicPurchase.telegram_id == telegram_id)))
+
+
+def has_case_access(db: Session, telegram_id: int, case_id: str) -> bool:
+    """Անվճար քեյս, կամ Plus, կամ այդ ուղղության առանձին գնում։"""
+    if not is_plus_case(case_id):
+        return True
+    if user_has_plus(db, telegram_id):
+        return True
+    sp = lic_spec(case_id)
+    return bool(sp and sp in lic_owned(db, telegram_id))
+
+
+def record_lic_purchase(db: Session, telegram_id: int, spec: str, charge_id: str, stars: int) -> bool:
+    if spec not in LIC_SPECS or db.scalar(select(LicPurchase.id).where(LicPurchase.charge_id == charge_id)):
+        return False
+    if db.scalar(select(LicPurchase.id).where(LicPurchase.telegram_id == telegram_id, LicPurchase.spec == spec)):
+        return False
+    db.add(LicPurchase(telegram_id=telegram_id, spec=spec, charge_id=charge_id, stars=stars))
+    db.commit()
+    return True
 
 
 def plus_status(db: Session, telegram_id: int) -> dict:
